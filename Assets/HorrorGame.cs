@@ -11,14 +11,16 @@ public class HorrorGame : MonoBehaviour
     readonly List<Light> lamps = new List<Light>();
     readonly List<float> lampK = new List<float>();
     readonly List<Vector2> furn = new List<Vector2>();
-    Transform player, cam, granny, ghostBillboard, scareGhost; CharacterController cc; Light flash;
+    Transform player, cam, granny, ghostBillboard, scareGhost, scareModel; CharacterController cc; Light flash;
     Door front, near; Material wallMat, wallPanelMat, doorMat, woodMat, gold, floorMat, bottleMat;
-    Texture2D keyTexture, ghostTexture, floorTexture;
-    AudioClip ambienceClip, childCryClip, ghostLaughClip, ghostScreamClip, dogHowlClip, thunderClip, keyClip, doorClip;
+    Texture2D keyTexture, ghostTexture, floorTexture, runIcon, joystickIcon, sitIcon, standIcon, handIcon, settingsIcon;
+    Texture2D uiButtonTexture, uiButtonHoverTexture, joystickDot;
+    AudioClip ambienceClip, childCryClip, ghostLaughClip, ghostScreamClip, dogHowlClip, dogHowlFileClip, babyCryFileClip, thunderClip, keyClip, doorClip;
     AudioSource ambienceSource, musicSource;
-    float soundT = 8f, proximitySoundT = 4f;
+    float soundT = 8f, proximitySoundT = 4f, dogHowlTimer = 10f, babyCryTimer = 30f;
     float yaw, pitch, stamina = 1, chaseT, blackout, nextBlackout = 12, msgT, bob;
-    int keyCount, state; float playerBlood = 100f, hitCooldown, scareT; bool firstScareShown; string msg = "";
+    int keyCount, state; float playerBlood = 100f, hitCooldown, scareT, verticalVelocity; bool firstScareShown; string msg = "";
+    float sensitivity = 1f, masterVolume = 1f; bool settingsOpen, musicEnabled = true, crouched, touchRun, buttonRunHeld, buttonJumpPressed; Vector2 touchMove;
     Vector2Int pN; bool hasN, hasW; Vector3 pW;
 
     Material Mat(Color c, bool emit = false)
@@ -26,6 +28,54 @@ public class HorrorGame : MonoBehaviour
         var m = new Material(Shader.Find("Standard")); m.color = c;
         if (emit) { m.EnableKeyword("_EMISSION"); m.SetColor("_EmissionColor", c * 2f); }
         return m;
+    }
+    Texture2D IconCanvas()
+    {
+        var t = new Texture2D(128, 128, TextureFormat.RGBA32, false); t.filterMode = FilterMode.Bilinear;
+        var pixels = new Color[128 * 128]; for (int i = 0; i < pixels.Length; i++) pixels[i] = Color.clear;
+        t.SetPixels(pixels); return t;
+    }
+    void IconLine(Texture2D t, Vector2 a, Vector2 b, Color color, int width = 4)
+    {
+        int steps = Mathf.CeilToInt(Vector2.Distance(a, b) * 2f);
+        for (int i = 0; i <= steps; i++)
+        {
+            Vector2 p = Vector2.Lerp(a, b, i / (float)Mathf.Max(1, steps));
+            for (int x = -width; x <= width; x++) for (int y = -width; y <= width; y++)
+                if (x * x + y * y <= width * width) t.SetPixel(Mathf.Clamp(Mathf.RoundToInt(p.x) + x, 0, 127), Mathf.Clamp(Mathf.RoundToInt(p.y) + y, 0, 127), color);
+        }
+    }
+    void IconCircle(Texture2D t, Vector2 center, float radius, Color color, int width = 4)
+    {
+        for (int i = 0; i < 96; i++)
+        {
+            float a = i * Mathf.PI * 2f / 96f; IconLine(t, center + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * radius, center + new Vector2(Mathf.Cos(a + .08f), Mathf.Sin(a + .08f)) * radius, color, width);
+        }
+    }
+    Texture2D MakeIcon(string kind)
+    {
+        Texture2D t = IconCanvas(); Color ink = new Color(.92f, .95f, 1f, 1f);
+        if (kind == "joystick") { IconCircle(t, new Vector2(64, 64), 50, ink, 4); IconCircle(t, new Vector2(64, 64), 12, ink, 3); IconLine(t, new Vector2(64, 88), new Vector2(64, 102), ink, 3); IconLine(t, new Vector2(64, 26), new Vector2(64, 40), ink, 3); IconLine(t, new Vector2(26, 64), new Vector2(40, 64), ink, 3); IconLine(t, new Vector2(88, 64), new Vector2(102, 64), ink, 3); }
+        if (kind == "run") { IconCircle(t, new Vector2(68, 24), 10, ink, 5); IconLine(t, new Vector2(66, 38), new Vector2(57, 70), ink, 6); IconLine(t, new Vector2(61, 47), new Vector2(38, 53), ink, 5); IconLine(t, new Vector2(61, 48), new Vector2(85, 57), ink, 5); IconLine(t, new Vector2(58, 69), new Vector2(36, 101), ink, 6); IconLine(t, new Vector2(58, 69), new Vector2(86, 94), ink, 6); }
+        if (kind == "sit") { IconCircle(t, new Vector2(62, 24), 10, ink, 5); IconLine(t, new Vector2(61, 38), new Vector2(61, 65), ink, 6); IconLine(t, new Vector2(61, 48), new Vector2(39, 62), ink, 5); IconLine(t, new Vector2(61, 64), new Vector2(90, 64), ink, 6); IconLine(t, new Vector2(89, 64), new Vector2(102, 94), ink, 6); IconLine(t, new Vector2(61, 64), new Vector2(40, 96), ink, 6); }
+        if (kind == "stand") { IconCircle(t, new Vector2(64, 22), 10, ink, 5); IconLine(t, new Vector2(64, 37), new Vector2(64, 76), ink, 6); IconLine(t, new Vector2(64, 49), new Vector2(38, 63), ink, 5); IconLine(t, new Vector2(64, 49), new Vector2(90, 63), ink, 5); IconLine(t, new Vector2(64, 75), new Vector2(43, 104), ink, 6); IconLine(t, new Vector2(64, 75), new Vector2(85, 104), ink, 6); }
+        if (kind == "hand") { IconLine(t, new Vector2(47, 98), new Vector2(42, 58), ink, 6); IconLine(t, new Vector2(42, 58), new Vector2(30, 43), ink, 5); IconLine(t, new Vector2(52, 61), new Vector2(51, 24), ink, 5); IconLine(t, new Vector2(63, 61), new Vector2(64, 18), ink, 5); IconLine(t, new Vector2(74, 61), new Vector2(78, 23), ink, 5); IconLine(t, new Vector2(84, 66), new Vector2(94, 34), ink, 5); IconLine(t, new Vector2(47, 98), new Vector2(84, 98), ink, 6); }
+        if (kind == "settings") { IconCircle(t, new Vector2(64, 64), 22, ink, 7); IconCircle(t, new Vector2(64, 64), 8, ink, 4); for (int i = 0; i < 8; i++) { float a = i * Mathf.PI / 4f; IconLine(t, new Vector2(64, 64) + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 25f, new Vector2(64, 64) + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 45f, ink, 5); } }
+        t.Apply(); return t;
+    }
+    Texture2D SolidTexture(Color color)
+    {
+        var t = new Texture2D(1, 1); t.SetPixel(0, 0, color); t.Apply(); return t;
+    }
+    Texture2D CircleTexture(int size, Color color)
+    {
+        var t = new Texture2D(size, size, TextureFormat.RGBA32, false); Color[] pixels = new Color[size * size];
+        Vector2 center = Vector2.one * (size - 1) * .5f; float radius = size * .45f;
+        for (int y = 0; y < size; y++) for (int x = 0; x < size; x++)
+        {
+            Vector2 p = new Vector2(x, y); pixels[y * size + x] = Vector2.Distance(p, center) <= radius ? color : Color.clear;
+        }
+        t.SetPixels(pixels); t.Apply(); return t;
     }
     Material ImageMat(Texture2D texture, bool transparent)
     {
@@ -117,10 +167,21 @@ public class HorrorGame : MonoBehaviour
     }
     void ShowScare(float duration)
     {
-        if (ghostTexture == null) return;
         if (scareGhost != null) Destroy(scareGhost.gameObject);
-        scareGhost = Billboard("Granny Jumpscare", new Vector3(0, .15f, 1.25f), new Vector3(1.55f, 3.1f, 1), ghostTexture, cam);
-        scareGhost.localRotation = Quaternion.Euler(0, 180, 0); scareT = duration;
+        if (scareModel != null) Destroy(scareModel.gameObject);
+        if (ghostTexture != null)
+        {
+            scareGhost = Billboard("Granny Jumpscare", new Vector3(0, .15f, 1.25f), new Vector3(1.55f, 3.1f, 1), ghostTexture, cam);
+            scareGhost.localRotation = Quaternion.Euler(0, 180, 0);
+        }
+        scareModel = new GameObject("First Ghost Fallback").transform; scareModel.SetParent(cam, false);
+        Material robe = Mat(new Color(.055f, .06f, .055f)); Material skin = Mat(new Color(.34f, .36f, .32f)); Material eyes = Mat(new Color(1f, .02f, .01f), true);
+        Part(PrimitiveType.Capsule, "Ghost Body", scareModel, new Vector3(0, .1f, 1.2f), new Vector3(.68f, 1.2f, .62f), robe, Quaternion.identity);
+        Part(PrimitiveType.Sphere, "Ghost Head", scareModel, new Vector3(0, 1.45f, 1.2f), new Vector3(.7f, .72f, .62f), skin, Quaternion.Euler(0, 0, -12));
+        Part(PrimitiveType.Cube, "Ghost Jaw", scareModel, new Vector3(0, 1.25f, .67f), new Vector3(.3f, .2f, .08f), Mat(new Color(.08f, .035f, .03f)), Quaternion.identity);
+        Part(PrimitiveType.Sphere, "Ghost Eye Left", scareModel, new Vector3(-.2f, 1.5f, .66f), new Vector3(.12f, .12f, .08f), eyes, Quaternion.identity);
+        Part(PrimitiveType.Sphere, "Ghost Eye Right", scareModel, new Vector3(.2f, 1.5f, .66f), new Vector3(.12f, .12f, .08f), eyes, Quaternion.identity);
+        scareT = duration;
     }
     GameObject P(PrimitiveType t, Vector3 pos, Vector3 sc, Material m, Transform par = null, bool col = true)
     {
@@ -166,6 +227,108 @@ public class HorrorGame : MonoBehaviour
         P(PrimitiveType.Cylinder, center + new Vector3(.55f, 1.7f, 0), new Vector3(.19f, .05f, .19f), bottleMat, null, false);
         furn.Add(new Vector2(center.x, center.z));
     }
+    void CreateInWorldGhost(Transform parent)
+    {
+        Material robe = Mat(new Color(.055f, .06f, .055f)); Material skin = Mat(new Color(.34f, .36f, .32f)); Material eyes = Mat(new Color(1f, .015f, .01f), true);
+        Part(PrimitiveType.Capsule, "Corpse Robe", parent, new Vector3(0, .78f, 0), new Vector3(.62f, .85f, .42f), robe, Quaternion.identity);
+        Part(PrimitiveType.Sphere, "Corpse Head", parent, new Vector3(0, 1.75f, 0), new Vector3(.55f, .66f, .48f), skin, Quaternion.Euler(0, 0, -12));
+        Part(PrimitiveType.Cube, "Corpse Arm Left", parent, new Vector3(-.58f, 1.05f, 0), new Vector3(.12f, .95f, .14f), skin, Quaternion.Euler(0, 0, -24));
+        Part(PrimitiveType.Cube, "Corpse Arm Right", parent, new Vector3(.58f, 1.05f, 0), new Vector3(.12f, .95f, .14f), skin, Quaternion.Euler(0, 0, 24));
+        Part(PrimitiveType.Sphere, "Ghost Eye Left", parent, new Vector3(-.18f, 1.82f, .43f), new Vector3(.1f, .12f, .06f), eyes, Quaternion.identity);
+        Part(PrimitiveType.Sphere, "Ghost Eye Right", parent, new Vector3(.18f, 1.82f, .43f), new Vector3(.1f, .12f, .06f), eyes, Quaternion.identity);
+        Part(PrimitiveType.Cube, "Ghost Mouth", parent, new Vector3(0, 1.58f, .43f), new Vector3(.24f, .16f, .05f), Mat(Color.black), Quaternion.identity);
+        Material teeth = Mat(new Color(.82f, .76f, .58f), true); Material blood = Mat(new Color(.3f, .008f, .004f));
+        for (int i = -1; i <= 1; i++) Part(PrimitiveType.Cube, "Broken tooth", parent, new Vector3(i * .07f, 1.59f, .47f), new Vector3(.035f, .07f, .025f), teeth, Quaternion.identity);
+        Part(PrimitiveType.Sphere, "Corpse wound", parent, new Vector3(-.22f, 1.12f, .38f), new Vector3(.12f, .18f, .04f), blood, Quaternion.identity);
+        Part(PrimitiveType.Cube, "Torn robe", parent, new Vector3(.25f, .22f, 0), new Vector3(.2f, .5f, .05f), robe, Quaternion.Euler(0, 0, 12));
+    }
+    void RodBetween(string name, Vector3 start, Vector3 end, float width, Material material)
+    {
+        Vector3 delta = end - start; var rod = GameObject.CreatePrimitive(PrimitiveType.Cylinder); rod.name = name;
+        rod.transform.position = (start + end) * .5f; rod.transform.localScale = new Vector3(width, delta.magnitude * .5f, width);
+        rod.transform.rotation = Quaternion.FromToRotation(Vector3.up, delta.normalized); rod.GetComponent<Renderer>().material = material;
+        Destroy(rod.GetComponent<Collider>());
+    }
+    void CreateCobweb(Vector3 center, float radius)
+    {
+        Material web = Mat(new Color(.55f, .58f, .55f));
+        for (int i = 0; i < 8; i++)
+        {
+            float a = i * Mathf.PI * 2f / 8f;
+            RodBetween("Cobweb spoke", center, center + new Vector3(Mathf.Cos(a) * radius, 0, Mathf.Sin(a) * radius), .018f, web);
+        }
+        for (int ring = 1; ring <= 3; ring++)
+        {
+            float r = radius * ring / 3f;
+            for (int i = 0; i < 8; i++)
+            {
+                float a = i * Mathf.PI * 2f / 8f, b = (i + 1) * Mathf.PI * 2f / 8f;
+                RodBetween("Cobweb ring", center + new Vector3(Mathf.Cos(a) * r, 0, Mathf.Sin(a) * r), center + new Vector3(Mathf.Cos(b) * r, 0, Mathf.Sin(b) * r), .014f, web);
+            }
+        }
+    }
+    void CreateSpider(Vector3 position)
+    {
+        Transform spider = new GameObject("Hanging Spider").transform; spider.position = position;
+        Material black = Mat(new Color(.015f, .01f, .008f));
+        Part(PrimitiveType.Sphere, "Spider body", spider, Vector3.zero, new Vector3(.22f, .12f, .3f), black, Quaternion.identity);
+        Part(PrimitiveType.Sphere, "Spider head", spider, new Vector3(0, -.02f, .18f), new Vector3(.15f, .1f, .15f), black, Quaternion.identity);
+        for (int i = 0; i < 8; i++)
+        {
+            float a = i * Mathf.PI * 2f / 8f; Vector3 leg = new Vector3(Mathf.Cos(a) * .28f, 0, Mathf.Sin(a) * .28f);
+            RodBetween("Spider leg", position + new Vector3(0, 0, 0) + leg * .35f, position + leg, .025f, black);
+        }
+    }
+    void CreateCockroach(Vector3 position, float rotation)
+    {
+        Transform roach = new GameObject("Cockroach").transform; roach.position = position; roach.rotation = Quaternion.Euler(0, rotation, 0);
+        Material shell = Mat(new Color(.035f, .012f, .006f));
+        Part(PrimitiveType.Sphere, "Roach shell", roach, Vector3.zero, new Vector3(.3f, .08f, .12f), shell, Quaternion.identity);
+        Part(PrimitiveType.Sphere, "Roach head", roach, new Vector3(0, .01f, .14f), new Vector3(.12f, .07f, .08f), shell, Quaternion.identity);
+        for (int i = -1; i <= 1; i += 2)
+        {
+            for (int j = -1; j <= 1; j += 2)
+                Part(PrimitiveType.Cube, "Roach leg", roach, new Vector3(i * .16f, 0, j * .06f), new Vector3(.22f, .025f, .025f), shell, Quaternion.Euler(0, i * 25f, 0));
+        }
+    }
+    void CreateCeilingDetails()
+    {
+        Material hole = Mat(new Color(.008f, .004f, .003f)); Material beam = Mat(new Color(.2f, .09f, .035f));
+        P(PrimitiveType.Cylinder, new Vector3(7, 2.99f, 7), new Vector3(1.8f, .025f, 1.1f), hole, null, false);
+        P(PrimitiveType.Cylinder, new Vector3(23, 2.99f, 17), new Vector3(1.2f, .025f, .8f), hole, null, false);
+        P(PrimitiveType.Cube, new Vector3(15, 2.98f, 11), new Vector3(30, .08f, .18f), beam, null, false);
+        P(PrimitiveType.Cube, new Vector3(11, 2.98f, 20), new Vector3(.18f, .08f, 20), beam, null, false);
+        CreateCobweb(new Vector3(1.1f, 2.88f, 1.2f), 2.2f);
+        CreateCobweb(new Vector3(28.8f, 2.88f, 28.6f), 2.3f);
+        CreateCobweb(new Vector3(21.5f, 2.88f, 8.5f), 1.7f);
+        CreateSpider(new Vector3(2.1f, 2.55f, 1.9f));
+        CreateSpider(new Vector3(27.6f, 2.45f, 27.8f));
+        CreateCockroach(new Vector3(4.2f, .08f, 6.6f), 25f);
+        CreateCockroach(new Vector3(18.3f, .08f, 13.8f), 150f);
+        CreateCockroach(new Vector3(26.4f, .08f, 22.2f), 280f);
+        CreateCockroach(new Vector3(8.3f, .08f, 26.4f), 70f);
+    }
+    void CreateCeilingCorpse()
+    {
+        Vector3 holeCenter = new Vector3(15f, 3.02f, 15f); Material crack = Mat(new Color(.035f, .025f, .02f));
+        Material corpse = Mat(new Color(.38f, .42f, .36f)); Material cloth = Mat(new Color(.08f, .07f, .065f)); Material wound = Mat(new Color(.25f, .008f, .004f));
+        P(PrimitiveType.Cylinder, holeCenter, new Vector3(1.25f, .025f, 1.25f), Mat(new Color(.006f, .003f, .002f)), null, false);
+        for (int i = 0; i < 10; i++)
+        {
+            float a = i * Mathf.PI * 2f / 10f; Vector3 edge = holeCenter + new Vector3(Mathf.Cos(a) * Random.Range(2.2f, 4.5f), .02f, Mathf.Sin(a) * Random.Range(2.2f, 4.5f));
+            RodBetween("Ceiling crack", holeCenter + new Vector3(Mathf.Cos(a) * .5f, .03f, Mathf.Sin(a) * .5f), edge, .018f, crack);
+        }
+        var hanging = new GameObject("Hanging Ceiling Corpse").transform; hanging.position = holeCenter;
+        Part(PrimitiveType.Cylinder, "Old ceiling wire", hanging, new Vector3(0, -.48f, 0), new Vector3(.025f, .5f, .025f), crack, Quaternion.identity);
+        Part(PrimitiveType.Capsule, "Hanging corpse torso", hanging, new Vector3(0, -1.05f, 0), new Vector3(.36f, .7f, .3f), corpse, Quaternion.Euler(0, 0, 8));
+        Part(PrimitiveType.Sphere, "Hanging corpse head", hanging, new Vector3(0, -1.8f, .02f), new Vector3(.32f, .38f, .28f), corpse, Quaternion.Euler(0, 0, -18));
+        Part(PrimitiveType.Cube, "Hanging corpse cloth", hanging, new Vector3(0, -.95f, .12f), new Vector3(.65f, .08f, .08f), cloth, Quaternion.Euler(0, 0, -12));
+        Part(PrimitiveType.Cube, "Hanging wound", hanging, new Vector3(0, -1.75f, .25f), new Vector3(.13f, .18f, .04f), wound, Quaternion.identity);
+        Part(PrimitiveType.Cube, "Hanging arm left", hanging, new Vector3(-.42f, -1.1f, 0), new Vector3(.1f, .75f, .1f), corpse, Quaternion.Euler(0, 0, 30));
+        Part(PrimitiveType.Cube, "Hanging arm right", hanging, new Vector3(.42f, -1.1f, 0), new Vector3(.1f, .75f, .1f), corpse, Quaternion.Euler(0, 0, -30));
+        var bulb = new GameObject("Broken ceiling bulb"); bulb.transform.position = holeCenter + Vector3.up * .2f;
+        var light = bulb.AddComponent<Light>(); light.type = LightType.Point; light.range = 7f; light.intensity = .65f; light.color = new Color(1f, .58f, .34f);
+    }
     Door AddDoor(float hx, float hz, bool ax, bool locked = false)
     {
         var piv = new GameObject("Door").transform; piv.position = new Vector3(hx, 0, hz);
@@ -198,7 +361,8 @@ public class HorrorGame : MonoBehaviour
 
     void Start()
     {
-        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.lockState = Application.isMobilePlatform ? CursorLockMode.None : CursorLockMode.Locked;
+        AudioListener.volume = masterVolume;
         foreach (var l in FindObjectsOfType<Light>()) if (l.type == LightType.Directional) l.enabled = false;
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat; RenderSettings.ambientLight = new Color(.07f, .07f, .09f);
         RenderSettings.fog = true; RenderSettings.fogMode = FogMode.Exponential; RenderSettings.fogDensity = .08f; RenderSettings.fogColor = Color.black;
@@ -206,12 +370,16 @@ public class HorrorGame : MonoBehaviour
         ghostTexture = Resources.Load<Texture2D>("Granny");
         if (ghostTexture == null) ghostTexture = Resources.Load<Texture2D>("GhostWoman");
         floorTexture = Resources.Load<Texture2D>("WoodFloor");
-        AudioClip theme = Resources.Load<AudioClip>("MainMenuTheme");
+        dogHowlFileClip = Resources.Load<AudioClip>("DogHowl"); babyCryFileClip = Resources.Load<AudioClip>("BabyCrying");
+        runIcon = MakeIcon("run"); joystickIcon = MakeIcon("joystick"); sitIcon = MakeIcon("sit"); standIcon = MakeIcon("stand"); handIcon = MakeIcon("hand"); settingsIcon = MakeIcon("settings");
+        uiButtonTexture = SolidTexture(new Color(.04f, .055f, .075f, .94f)); uiButtonHoverTexture = SolidTexture(new Color(.12f, .16f, .2f, .98f)); joystickDot = CircleTexture(64, new Color(.92f, .95f, 1f, .95f));
+        AudioClip theme = Resources.Load<AudioClip>("BackgroundMusic");
+        if (theme == null) theme = Resources.Load<AudioClip>("MainMenuTheme");
         BuildScaryAudio();
         if (theme != null)
         {
             var musicObject = new GameObject("Main Menu Theme"); musicSource = musicObject.AddComponent<AudioSource>();
-            musicSource.clip = theme; musicSource.loop = true; musicSource.volume = .34f; musicSource.spatialBlend = 0f; musicSource.Play();
+            musicSource.clip = theme; musicSource.loop = true; musicSource.volume = .34f; musicSource.spatialBlend = 0f; musicSource.mute = !musicEnabled; musicSource.Play();
         }
         wallMat = Mat(new Color(.42f, .40f, .36f)); wallPanelMat = Mat(new Color(.72f, .70f, .64f));
         doorMat = Mat(new Color(.29f, .17f, .09f)); woodMat = Mat(new Color(.17f, .1f, .06f)); gold = Mat(new Color(1f, .8f, .2f), true);
@@ -219,8 +387,8 @@ public class HorrorGame : MonoBehaviour
         floorMat = ImageMat(floorTexture, false); floorMat.mainTextureScale = new Vector2(8, 8);
 
         // floor, ceiling, ground, gable roof
-        P(PrimitiveType.Cube, new Vector3(15, -.1f, 15), new Vector3(30, .2f, 30), floorMat);
-        P(PrimitiveType.Cube, new Vector3(15, 3.1f, 15), new Vector3(30, .2f, 30), Mat(new Color(.1f, .08f, .07f)));
+        P(PrimitiveType.Cube, new Vector3(20, -.1f, 20), new Vector3(40, .2f, 40), floorMat);
+        P(PrimitiveType.Cube, new Vector3(20, 3.1f, 20), new Vector3(40, .2f, 40), Mat(new Color(.1f, .08f, .07f)));
         P(PrimitiveType.Cube, new Vector3(15, -.2f, 15), new Vector3(300, .2f, 300), Mat(new Color(.04f, .07f, .04f)));
         var rm = Mat(new Color(.16f, .08f, .06f));
         var r1 = P(PrimitiveType.Cube, new Vector3(15, 6.7f, 7), new Vector3(32, .4f, 17.6f), rm, null, false); r1.transform.rotation = Quaternion.Euler(-25, 0, 0);
@@ -228,7 +396,9 @@ public class HorrorGame : MonoBehaviour
 
         // walls + doors
         Wall(0, 0, 30, 0); Wall(0, 0, 0, 30); Wall(30, 0, 30, 30); Wall(0, 30, 13.75f, 30); Wall(16.25f, 30, 30, 30);
-        front = AddDoor(13.75f, 30, true, true);
+        Wall(0, 30, 0, 40); Wall(30, 30, 30, 40); Wall(0, 40, 13.75f, 40); Wall(16.25f, 40, 30, 40);
+        AddDoor(13.75f, 30, true, false);
+        front = AddDoor(13.75f, 40, true, true);
         foreach (float c in new[] { 10f, 20f })
             for (int i = 0; i < 3; i++)
             {
@@ -252,6 +422,12 @@ public class HorrorGame : MonoBehaviour
                 var L = lg.AddComponent<Light>(); L.type = LightType.Point; L.range = 13; L.intensity = 1.2f; L.color = lc[(i * 3 + j) % 4];
                 lamps.Add(L); lampK.Add(0);
             }
+        CreateCeilingDetails();
+        CreateCeilingCorpse();
+        AddRoomFurniture(new Vector3(15, 0, 35));
+        AddMissingText(new Vector3(15, 1.65f, 39.77f), Vector3.back);
+        var hallLamp = new GameObject("Entry Hall Lamp"); hallLamp.transform.position = new Vector3(15, 2.6f, 35);
+        var hallLight = hallLamp.AddComponent<Light>(); hallLight.type = LightType.Point; hallLight.range = 18; hallLight.intensity = 1.6f; hallLight.color = new Color(1f, .72f, .48f);
 
         // 10 keys (never in the start room)
         var rooms = new List<Vector2Int>();
@@ -298,8 +474,10 @@ public class HorrorGame : MonoBehaviour
             ghostBillboard = null;
             Say("Ghost image missing: using 3D fallback.", 4);
         }
+        CreateInWorldGhost(granny);
         granny.position = new Vector3(5, 0, 25);
         Say("Find 10 keys. Stay quiet. She is listening...", 4);
+        ShowScare(2.6f);
     }
 
     Vector2Int Cell(Vector3 p) { return new Vector2Int(Mathf.Clamp((int)(p.x / 10), 0, 2), Mathf.Clamp((int)(p.z / 10), 0, 2)); }
@@ -348,6 +526,46 @@ public class HorrorGame : MonoBehaviour
         D.open = o; D.col.enabled = !o; D.w = 0; return true;
     }
     void Say(string s, float t) { msg = s; msgT = t; }
+    void CollectKey(int index)
+    {
+        Destroy(keys[index].gameObject); keys.RemoveAt(index); keyCount++; PlayScare(keyClip, player.position, .55f);
+        if (keyCount == 1 && !firstScareShown) { firstScareShown = true; ShowScare(2.2f); Say("Something is watching you...", 3f); }
+        if (keyCount >= 10) { front.locked = false; Open(front, true); Say("The front door is unlocked! RUN!", 5); }
+        else Say("Key found: " + keyCount + "/10", 2.5f);
+    }
+    void TryTakeKey()
+    {
+        for (int i = keys.Count - 1; i >= 0; i--)
+        {
+            if (Vector3.Distance(keys[i].position, player.position + Vector3.up) < 2f) { CollectKey(i); return; }
+        }
+        Say("Move closer to a key.", 1.2f);
+    }
+    void ReadTouchControls()
+    {
+        touchMove = Vector2.zero; touchRun = buttonRunHeld;
+        Rect runRect = new Rect(Screen.width - 125, Screen.height - 200, 80, 62);
+        Rect sitRect = new Rect(Screen.width - 125, Screen.height - 125, 80, 62);
+        Rect jumpRect = new Rect(Screen.width - 235, Screen.height - 160, 80, 62);
+        Rect handRect = new Rect(Screen.width - 235, Screen.height - 92, 80, 62);
+        for (int i = 0; i < Input.touchCount; i++)
+        {
+            Touch touch = Input.GetTouch(i);
+            Vector2 guiPosition = new Vector2(touch.position.x, Screen.height - touch.position.y);
+            if (runRect.Contains(guiPosition)) { touchRun = true; continue; }
+            if (touch.phase == TouchPhase.Began && sitRect.Contains(guiPosition)) { crouched = !crouched; continue; }
+            if (touch.phase == TouchPhase.Began && jumpRect.Contains(guiPosition)) { buttonJumpPressed = true; continue; }
+            if (touch.phase == TouchPhase.Began && handRect.Contains(guiPosition)) { TryTakeKey(); continue; }
+            if (touch.position.x < Screen.width * .45f && touch.position.y < Screen.height * .55f)
+            {
+                Vector2 center = new Vector2(115f, 115f); touchMove = Vector2.ClampMagnitude((touch.position - center) / 95f, 1f);
+            }
+            else if (touch.position.x > Screen.width * .45f && touch.position.y > Screen.height * .25f)
+            {
+                yaw += touch.deltaPosition.x * .12f * sensitivity; pitch = Mathf.Clamp(pitch - touch.deltaPosition.y * .12f * sensitivity, -80f, 80f);
+            }
+        }
+    }
 
     void Update()
     {
@@ -356,19 +574,29 @@ public class HorrorGame : MonoBehaviour
         if (scareGhost != null && scareT > 0f)
         {
             scareT -= dt;
-            if (scareT <= 0f) { Destroy(scareGhost.gameObject); scareGhost = null; }
+            if (scareT <= 0f)
+            {
+                if (scareGhost != null) { Destroy(scareGhost.gameObject); scareGhost = null; }
+                if (scareModel != null) { Destroy(scareModel.gameObject); scareModel = null; }
+            }
         }
 
         // player
-        yaw += Input.GetAxis("Mouse X") * 2f; pitch = Mathf.Clamp(pitch - Input.GetAxis("Mouse Y") * 2f, -80, 80);
+        ReadTouchControls();
+        yaw += Input.GetAxis("Mouse X") * 2f * sensitivity; pitch = Mathf.Clamp(pitch - Input.GetAxis("Mouse Y") * 2f * sensitivity, -80, 80);
         player.rotation = Quaternion.Euler(0, yaw, 0); cam.localRotation = Quaternion.Euler(pitch, 0, 0);
-        Vector3 dir = player.forward * Input.GetAxisRaw("Vertical") + player.right * Input.GetAxisRaw("Horizontal");
+        Vector3 dir = player.forward * (Input.GetAxisRaw("Vertical") + touchMove.y) + player.right * (Input.GetAxisRaw("Horizontal") + touchMove.x);
         if (dir.magnitude > 1) dir.Normalize();
-        bool sp = Input.GetKey(KeyCode.LeftShift) && stamina > .02f && dir.sqrMagnitude > 0;
+        bool sp = (Input.GetKey(KeyCode.LeftShift) || touchRun) && stamina > .02f && dir.sqrMagnitude > 0;
         stamina = sp ? Mathf.Max(0, stamina - dt * .35f) : Mathf.Min(1, stamina + dt * .12f);
-        cc.Move((dir * (sp ? 5.6f : 3.2f) + Vector3.down * 2f) * dt);
+        float targetHeight = crouched ? 1f : 1.8f; cc.height = Mathf.Lerp(cc.height, targetHeight, dt * 8f); cc.center = new Vector3(0, cc.height * .5f, 0);
+        bool jumpPressed = Input.GetKeyDown(KeyCode.Space) || buttonJumpPressed; buttonJumpPressed = false;
+        if (cc.isGrounded && verticalVelocity < 0f) verticalVelocity = -2f;
+        if (jumpPressed && cc.isGrounded && !crouched) verticalVelocity = 7.2f;
+        verticalVelocity += -20f * dt;
+        cc.Move((dir * (sp ? 5.6f : (crouched ? 1.8f : 3.2f)) + Vector3.up * verticalVelocity) * dt);
         if (dir.sqrMagnitude > 0) bob += dt * (sp ? 12 : 8);
-        cam.localPosition = new Vector3(0, 1.6f + Mathf.Sin(bob) * .045f, 0);
+        cam.localPosition = new Vector3(0, (crouched ? .95f : 1.6f) + Mathf.Sin(bob) * .045f, 0);
         Vector3 pp = player.position, gp = granny.position;
 
         // keys
@@ -377,11 +605,7 @@ public class HorrorGame : MonoBehaviour
             var k = keys[i]; k.LookAt(cam); k.Rotate(0, 0, 45 * dt);
             if (Vector3.Distance(k.position, pp + Vector3.up) < 1.3f)
             {
-                Destroy(k.gameObject); keys.RemoveAt(i); keyCount++;
-                PlayScare(keyClip, pp, .55f);
-                if (keyCount == 1 && !firstScareShown) { firstScareShown = true; ShowScare(2.2f); Say("Something is watching you...", 3f); }
-                if (keyCount >= 10) { front.locked = false; Open(front, true); Say("The front door is unlocked! RUN!", 5); }
-                else Say("Key found: " + keyCount + "/10", 2.5f);
+                CollectKey(i);
             }
         }
 
@@ -414,6 +638,18 @@ public class HorrorGame : MonoBehaviour
             PlayScare(choice == 0 ? dogHowlClip : choice == 1 ? childCryClip : thunderClip,
                 new Vector3(Random.Range(2f, 28f), 1f, Random.Range(2f, 28f)), .3f);
         }
+        dogHowlTimer -= dt; babyCryTimer -= dt;
+        if (dogHowlTimer <= 0f)
+        {
+            dogHowlTimer = 10f;
+            PlayScare(dogHowlFileClip != null ? dogHowlFileClip : dogHowlClip, new Vector3(Random.Range(2f, 28f), 1f, Random.Range(2f, 28f)), .7f);
+        }
+        if (babyCryTimer <= 0f)
+        {
+            babyCryTimer = 30f;
+            PlayScare(babyCryFileClip != null ? babyCryFileClip : childCryClip, new Vector3(Random.Range(3f, 27f), 1f, Random.Range(3f, 27f)), .65f);
+            Say("A baby is crying somewhere in the house...", 3f);
+        }
         Vector3 v = Target(chase) - gp; v.y = 0; float dd = v.magnitude; bool blocked = false;
         if (ghostBillboard != null) ghostBillboard.LookAt(cam);
         foreach (var D in doors)
@@ -430,7 +666,7 @@ public class HorrorGame : MonoBehaviour
             Say("Granny hit you! Blood: " + Mathf.CeilToInt(playerBlood) + "/100", 2f); chaseT = 0f;
             Vector3 retreat = gp - pp; retreat.y = 0; if (retreat.sqrMagnitude > .01f) granny.position += retreat.normalized * 2.5f;
         }
-        if (pp.z > 31 && keyCount >= 10) { state = 2; Cursor.lockState = CursorLockMode.None; return; }
+        if (pp.z > 41 && keyCount >= 10) { state = 2; Cursor.lockState = CursorLockMode.None; return; }
 
         // scary lights
         blackout -= dt; nextBlackout -= dt;
@@ -448,11 +684,43 @@ public class HorrorGame : MonoBehaviour
     {
         var l = new GUIStyle(GUI.skin.label) { fontSize = 22 }; l.normal.textColor = Color.white;
         var c = new GUIStyle(l) { alignment = TextAnchor.MiddleCenter };
+        var b = new GUIStyle(GUI.skin.button) { fontSize = 18 };
+        var iconButton = new GUIStyle(GUI.skin.button) { imagePosition = ImagePosition.ImageOnly, fontSize = 18, padding = new RectOffset(8, 8, 8, 8) };
+        iconButton.normal.background = uiButtonTexture; iconButton.hover.background = uiButtonHoverTexture; iconButton.active.background = uiButtonHoverTexture;
+        buttonRunHeld = false;
         GUI.Label(new Rect(15, 10, 500, 30), "Keys: " + keyCount + "/10", l);
         GUI.Label(new Rect(15, 40, 500, 30), "Stamina: " + new string('|', Mathf.RoundToInt(stamina * 20)), l);
         GUI.Label(new Rect(15, 70, 500, 30), "Blood: " + Mathf.CeilToInt(playerBlood) + "/100", l);
+        if (GUI.Button(new Rect(Screen.width - 70, 10, 55, 55), new GUIContent(settingsIcon, "Settings"), iconButton)) settingsOpen = !settingsOpen;
+        if (settingsOpen)
+        {
+            GUI.Box(new Rect(Screen.width - 330, 62, 315, 205), "SETTINGS");
+            GUI.Label(new Rect(Screen.width - 315, 94, 285, 24), "Sensitivity: " + sensitivity.ToString("0.0"), l);
+            sensitivity = GUI.HorizontalSlider(new Rect(Screen.width - 315, 122, 285, 24), sensitivity, .25f, 2.5f);
+            GUI.Label(new Rect(Screen.width - 315, 145, 285, 24), "Volume: " + Mathf.RoundToInt(masterVolume * 100f) + "%", l);
+            masterVolume = GUI.HorizontalSlider(new Rect(Screen.width - 315, 173, 285, 24), masterVolume, 0f, 1f);
+            AudioListener.volume = masterVolume;
+            if (GUI.Button(new Rect(Screen.width - 315, 205, 285, 35), musicEnabled ? "BACKGROUND MUSIC: ON" : "BACKGROUND MUSIC: OFF", b)) musicEnabled = !musicEnabled;
+            if (musicSource != null) musicSource.mute = !musicEnabled;
+        }
         if (near != null && state == 0) GUI.Label(new Rect(0, Screen.height * .65f, Screen.width, 40), "[E] " + (near.open ? "Close" : "Open") + " door", c);
         if (msgT > 0) GUI.Label(new Rect(0, Screen.height * .8f, Screen.width, 40), msg, c);
+        Rect joystickRect = new Rect(25, Screen.height - 185, 180, 160); GUI.Box(joystickRect, "");
+        if (joystickIcon != null) GUI.DrawTexture(new Rect(45, Screen.height - 162, 140, 120), joystickIcon, ScaleMode.ScaleToFit, true);
+        float pulse = 1f + Mathf.Sin(Time.realtimeSinceStartup * 4f) * .08f; Vector2 dot = new Vector2(115f, Screen.height - 102f) + touchMove * 42f;
+        float dotSize = 22f * pulse; if (joystickDot != null) GUI.DrawTexture(new Rect(dot.x - dotSize * .5f, dot.y - dotSize * .5f, dotSize, dotSize), joystickDot, ScaleMode.ScaleToFit, true);
+        GUI.Label(new Rect(70, Screen.height - 207, 95, 22), "MOVE", c);
+        Rect runRect = new Rect(Screen.width - 125, Screen.height - 200, 80, 62);
+        buttonRunHeld = runIcon != null ? GUI.RepeatButton(runRect, new GUIContent(runIcon), iconButton) : GUI.RepeatButton(runRect, "RUN", b);
+        GUI.Label(new Rect(Screen.width - 125, Screen.height - 136, 80, 20), "RUN", c);
+        Rect sitRect = new Rect(Screen.width - 125, Screen.height - 125, 80, 62);
+        if (!Input.touchSupported && GUI.Button(sitRect, new GUIContent(crouched ? standIcon : sitIcon), iconButton)) crouched = !crouched;
+        GUI.Label(new Rect(Screen.width - 125, Screen.height - 61, 80, 20), crouched ? "STAND" : "SIT", c);
+        Rect jumpRect = new Rect(Screen.width - 235, Screen.height - 160, 80, 62);
+        if (!Input.touchSupported && GUI.Button(jumpRect, "JUMP", b)) buttonJumpPressed = true;
+        Rect handRect = new Rect(Screen.width - 235, Screen.height - 92, 80, 62);
+        if (!Input.touchSupported && GUI.Button(handRect, new GUIContent(handIcon), iconButton)) TryTakeKey();
+        GUI.Label(new Rect(Screen.width - 235, Screen.height - 28, 80, 20), "TAKE", c);
         if (state != 0)
         {
             c.fontSize = 48; c.normal.textColor = state == 1 ? Color.red : Color.green;
