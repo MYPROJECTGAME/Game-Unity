@@ -181,14 +181,17 @@ public class HorrorGame : MonoBehaviour
 
         // granny
         granny = new GameObject("Granny").transform;
-        P(PrimitiveType.Capsule, new Vector3(0, .65f, 0), new Vector3(.6f, .65f, .6f), Mat(new Color(.16f, .09f, .19f)), granny, false);
-        P(PrimitiveType.Sphere, new Vector3(0, 1.5f, 0), Vector3.one * .45f, Mat(new Color(.79f, .76f, .7f)), granny, false);
-        P(PrimitiveType.Sphere, new Vector3(0, 1.58f, -.07f), new Vector3(.5f, .45f, .45f), Mat(new Color(.6f, .6f, .6f)), granny, false);
-        var em = Mat(Color.red, true);
-        P(PrimitiveType.Sphere, new Vector3(-.09f, 1.53f, .2f), Vector3.one * .07f, em, granny, false);
-        P(PrimitiveType.Sphere, new Vector3(.09f, 1.53f, .2f), Vector3.one * .07f, em, granny, false);
-        P(PrimitiveType.Cube, new Vector3(-.3f, 1.15f, .4f), new Vector3(.09f, .09f, .8f), Mat(new Color(.79f, .76f, .7f)), granny, false);
-        P(PrimitiveType.Cube, new Vector3(.3f, 1.15f, .4f), new Vector3(.09f, .09f, .8f), Mat(new Color(.79f, .76f, .7f)), granny, false);
+        if (ghostTexture == null)
+        {
+            P(PrimitiveType.Capsule, new Vector3(0, .65f, 0), new Vector3(.6f, .65f, .6f), Mat(new Color(.16f, .09f, .19f)), granny, false);
+            P(PrimitiveType.Sphere, new Vector3(0, 1.5f, 0), Vector3.one * .45f, Mat(new Color(.79f, .76f, .7f)), granny, false);
+            P(PrimitiveType.Sphere, new Vector3(0, 1.58f, -.07f), new Vector3(.5f, .45f, .45f), Mat(new Color(.6f, .6f, .6f)), granny, false);
+            var em = Mat(Color.red, true);
+            P(PrimitiveType.Sphere, new Vector3(-.09f, 1.53f, .2f), Vector3.one * .07f, em, granny, false);
+            P(PrimitiveType.Sphere, new Vector3(.09f, 1.53f, .2f), Vector3.one * .07f, em, granny, false);
+            P(PrimitiveType.Cube, new Vector3(-.3f, 1.15f, .4f), new Vector3(.09f, .09f, .8f), Mat(new Color(.79f, .76f, .7f)), granny, false);
+            P(PrimitiveType.Cube, new Vector3(.3f, 1.15f, .4f), new Vector3(.09f, .09f, .8f), Mat(new Color(.79f, .76f, .7f)), granny, false);
+        }
         var gl = new GameObject("GrannyGlow"); gl.transform.SetParent(granny, false); gl.transform.localPosition = new Vector3(0, 1.3f, 0);
         var gL = gl.AddComponent<Light>(); gL.color = Color.red; gL.range = 7; gL.intensity = 1f;
         ghostBillboard = Billboard("Ghost Woman", new Vector3(0, 1.5f, .05f), new Vector3(1.9f, 2.7f, 1), ghostTexture, granny);
@@ -253,7 +256,7 @@ public class HorrorGame : MonoBehaviour
         // keys
         for (int i = keys.Count - 1; i >= 0; i--)
         {
-            var k = keys[i]; k.LookAt(cam); k.Rotate(0, 0, 180); k.Rotate(0, 0, 45 * dt);
+            var k = keys[i]; k.LookAt(cam); k.Rotate(0, 0, 45 * dt);
             if (Vector3.Distance(k.position, pp + Vector3.up) < 1.3f)
             {
                 Destroy(k.gameObject); keys.RemoveAt(i); keyCount++;
