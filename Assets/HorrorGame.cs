@@ -15,7 +15,7 @@ public class HorrorGame : MonoBehaviour
     Door front, near; Material wallMat, doorMat, woodMat, gold, floorMat;
     Texture2D keyTexture, ghostTexture, floorTexture;
     AudioClip ambienceClip, childCryClip, ghostLaughClip, ghostScreamClip, dogHowlClip, thunderClip, keyClip, doorClip;
-    AudioSource ambienceSource;
+    AudioSource ambienceSource, musicSource;
     float soundT = 8f, proximitySoundT = 4f;
     float yaw, pitch, stamina = 1, chaseT, blackout, nextBlackout = 12, msgT, bob;
     int keyCount, state; string msg = "";
@@ -40,6 +40,25 @@ public class HorrorGame : MonoBehaviour
         g.name = name; g.transform.SetParent(parent); g.transform.localPosition = pos; g.transform.localScale = scale;
         Destroy(g.GetComponent<Collider>()); g.GetComponent<Renderer>().material = ImageMat(texture, true);
         return g.transform;
+    }
+    GameObject Part(PrimitiveType type, string name, Transform parent, Vector3 localPosition, Vector3 scale, Material material, Quaternion rotation)
+    {
+        var g = GameObject.CreatePrimitive(type); g.name = name; g.transform.SetParent(parent, false);
+        g.transform.localPosition = localPosition; g.transform.localScale = scale; g.transform.localRotation = rotation;
+        g.GetComponent<Renderer>().material = material; Destroy(g.GetComponent<Collider>()); return g;
+    }
+    Transform CreateKey(Vector3 position)
+    {
+        var root = new GameObject("Golden Key").transform; root.position = position;
+        Material keyMat = Mat(new Color(1f, .48f, .015f), true); Material insetMat = Mat(new Color(.16f, .07f, .02f));
+        Part(PrimitiveType.Cylinder, "Key Head", root, new Vector3(0, .45f, 0), new Vector3(.36f, .07f, .36f), keyMat, Quaternion.Euler(90, 0, 0));
+        Part(PrimitiveType.Cylinder, "Key Head Inset", root, new Vector3(0, .45f, .075f), new Vector3(.19f, .08f, .19f), insetMat, Quaternion.Euler(90, 0, 0));
+        Part(PrimitiveType.Cube, "Key Shaft", root, new Vector3(0, -.05f, 0), new Vector3(.12f, .75f, .12f), keyMat, Quaternion.identity);
+        Part(PrimitiveType.Cube, "Key Tooth A", root, new Vector3(.16f, -.38f, 0), new Vector3(.24f, .14f, .12f), keyMat, Quaternion.identity);
+        Part(PrimitiveType.Cube, "Key Tooth B", root, new Vector3(-.15f, -.52f, 0), new Vector3(.22f, .14f, .12f), keyMat, Quaternion.identity);
+        var glow = new GameObject("Key Glow"); glow.transform.SetParent(root, false); glow.transform.localPosition = new Vector3(0, .35f, 0);
+        var light = glow.AddComponent<Light>(); light.type = LightType.Point; light.color = new Color(1f, .46f, .05f); light.range = 2.5f; light.intensity = .55f;
+        return root;
     }
     AudioClip MakeClip(string name, float seconds, System.Func<float, float> generator)
     {
@@ -113,6 +132,27 @@ public class HorrorGame : MonoBehaviour
         var piv = new GameObject("Door").transform; piv.position = new Vector3(hx, 0, hz);
         var m = P(PrimitiveType.Cube, Vector3.zero, ax ? new Vector3(2.5f, 2.6f, .12f) : new Vector3(.12f, 2.6f, 2.5f), doorMat, piv);
         m.transform.localPosition = ax ? new Vector3(1.25f, 1.3f, 0) : new Vector3(0, 1.3f, 1.25f);
+        Material trim = Mat(new Color(.13f, .065f, .028f)); Material panel = Mat(new Color(.38f, .20f, .09f));
+        if (ax)
+        {
+            Part(PrimitiveType.Cube, "Door Panel Top", piv, new Vector3(1.25f, 2.0f, -.09f), new Vector3(1.5f, .72f, .08f), panel, Quaternion.identity);
+            Part(PrimitiveType.Cube, "Door Panel Middle", piv, new Vector3(1.25f, 1.27f, -.09f), new Vector3(1.5f, .25f, .08f), panel, Quaternion.identity);
+            Part(PrimitiveType.Cube, "Door Panel Bottom", piv, new Vector3(1.25f, .52f, -.09f), new Vector3(1.5f, .72f, .08f), panel, Quaternion.identity);
+            Part(PrimitiveType.Cube, "Door Frame Left", piv, new Vector3(.06f, 1.35f, -.1f), new Vector3(.12f, 2.85f, .16f), trim, Quaternion.identity);
+            Part(PrimitiveType.Cube, "Door Frame Right", piv, new Vector3(2.44f, 1.35f, -.1f), new Vector3(.12f, 2.85f, .16f), trim, Quaternion.identity);
+            Part(PrimitiveType.Cube, "Door Frame Top", piv, new Vector3(1.25f, 2.74f, -.1f), new Vector3(2.5f, .14f, .16f), trim, Quaternion.identity);
+            Part(PrimitiveType.Cylinder, "Door Handle", piv, new Vector3(2.12f, 1.35f, -.18f), new Vector3(.08f, .16f, .08f), gold, Quaternion.Euler(90, 0, 0));
+        }
+        else
+        {
+            Part(PrimitiveType.Cube, "Door Panel Top", piv, new Vector3(-.09f, 2.0f, 1.25f), new Vector3(.08f, .72f, 1.5f), panel, Quaternion.identity);
+            Part(PrimitiveType.Cube, "Door Panel Middle", piv, new Vector3(-.09f, 1.27f, 1.25f), new Vector3(.08f, .25f, 1.5f), panel, Quaternion.identity);
+            Part(PrimitiveType.Cube, "Door Panel Bottom", piv, new Vector3(-.09f, .52f, 1.25f), new Vector3(.08f, .72f, 1.5f), panel, Quaternion.identity);
+            Part(PrimitiveType.Cube, "Door Frame Left", piv, new Vector3(-.1f, 1.35f, .06f), new Vector3(.16f, 2.85f, .12f), trim, Quaternion.identity);
+            Part(PrimitiveType.Cube, "Door Frame Right", piv, new Vector3(-.1f, 1.35f, 2.44f), new Vector3(.16f, 2.85f, .12f), trim, Quaternion.identity);
+            Part(PrimitiveType.Cube, "Door Frame Top", piv, new Vector3(-.1f, 2.74f, 1.25f), new Vector3(.16f, .14f, 2.5f), trim, Quaternion.identity);
+            Part(PrimitiveType.Cylinder, "Door Handle", piv, new Vector3(-.18f, 1.35f, 2.12f), new Vector3(.08f, .16f, .08f), gold, Quaternion.Euler(0, 0, 90));
+        }
         var d = new Door { piv = piv, col = m.GetComponent<BoxCollider>(), locked = locked, c = piv.position + (ax ? new Vector3(1.25f, 0, 0) : new Vector3(0, 0, 1.25f)) };
         doors.Add(d); return d;
     }
@@ -127,7 +167,13 @@ public class HorrorGame : MonoBehaviour
         ghostTexture = Resources.Load<Texture2D>("Granny");
         if (ghostTexture == null) ghostTexture = Resources.Load<Texture2D>("GhostWoman");
         floorTexture = Resources.Load<Texture2D>("WoodFloor");
+        AudioClip theme = Resources.Load<AudioClip>("MainMenuTheme");
         BuildScaryAudio();
+        if (theme != null)
+        {
+            var musicObject = new GameObject("Main Menu Theme"); musicSource = musicObject.AddComponent<AudioSource>();
+            musicSource.clip = theme; musicSource.loop = true; musicSource.volume = .34f; musicSource.spatialBlend = 0f; musicSource.Play();
+        }
         wallMat = Mat(new Color(.36f, .29f, .23f)); doorMat = Mat(new Color(.29f, .17f, .09f)); woodMat = Mat(new Color(.17f, .1f, .06f)); gold = Mat(new Color(1f, .8f, .2f), true);
         floorMat = ImageMat(floorTexture, false); floorMat.mainTextureScale = new Vector2(8, 8);
 
@@ -170,7 +216,7 @@ public class HorrorGame : MonoBehaviour
             var r = rooms[n % 8]; Vector2 p;
             do { p = new Vector2(r.x * 10 + 5 + Random.Range(-3.5f, 3.5f), r.y * 10 + 5 + Random.Range(-3.5f, 3.5f)); }
             while (furn.Exists(f => Vector2.Distance(f, p) < 2f));
-            keys.Add(Billboard("Golden Key", new Vector3(p.x, 1.05f, p.y), Vector3.one * 1.15f, keyTexture, null));
+            keys.Add(CreateKey(new Vector3(p.x, 1.05f, p.y)));
         }
 
         // player
