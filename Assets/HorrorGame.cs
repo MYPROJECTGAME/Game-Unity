@@ -11,7 +11,7 @@ public class HorrorGame : MonoBehaviour
     readonly List<Light> lamps = new List<Light>();
     readonly List<float> lampK = new List<float>();
     readonly List<Vector2> furn = new List<Vector2>();
-    Transform player, cam, granny, ghostBillboard; CharacterController cc; Light flash;
+    Transform player, cam, granny, ghostBillboard, deathGhost; CharacterController cc; Light flash;
     Door front, near; Material wallMat, doorMat, woodMat, gold, floorMat;
     Texture2D keyTexture, ghostTexture, floorTexture;
     AudioClip ambienceClip, childCryClip, ghostLaughClip, ghostScreamClip, dogHowlClip, thunderClip, keyClip, doorClip;
@@ -114,6 +114,12 @@ public class HorrorGame : MonoBehaviour
     void PlayScare(AudioClip clip, Vector3 position, float volume)
     {
         if (clip != null) AudioSource.PlayClipAtPoint(clip, position, volume);
+    }
+    void ShowDeathGhost()
+    {
+        if (deathGhost != null || ghostTexture == null) return;
+        deathGhost = Billboard("Death Granny", new Vector3(0, .15f, 1.25f), new Vector3(1.55f, 3.1f, 1), ghostTexture, cam);
+        deathGhost.localRotation = Quaternion.Euler(0, 180, 0);
     }
     GameObject P(PrimitiveType t, Vector3 pos, Vector3 sc, Material m, Transform par = null, bool col = true)
     {
@@ -372,7 +378,7 @@ public class HorrorGame : MonoBehaviour
             float spd = chase ? 2.6f + keyCount * .19f : 1.5f;
             granny.position += v / dd * Mathf.Min(dd, spd * dt); granny.rotation = Quaternion.LookRotation(v / dd);
         }
-        if (d < 1.1f && chase) { PlayScare(ghostScreamClip, pp, .9f); state = 1; Time.timeScale = 0; Cursor.lockState = CursorLockMode.None; return; }
+        if (d < 1.1f && chase) { ShowDeathGhost(); PlayScare(ghostScreamClip, pp, .9f); state = 1; Time.timeScale = 0; Cursor.lockState = CursorLockMode.None; return; }
         if (pp.z > 31 && keyCount >= 10) { state = 2; Cursor.lockState = CursorLockMode.None; return; }
 
         // scary lights
