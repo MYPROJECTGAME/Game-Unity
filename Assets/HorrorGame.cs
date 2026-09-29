@@ -11,14 +11,14 @@ public class HorrorGame : MonoBehaviour
     readonly List<Light> lamps = new List<Light>();
     readonly List<float> lampK = new List<float>();
     readonly List<Vector2> furn = new List<Vector2>();
-    Transform player, cam, granny, ghostBillboard, deathGhost; CharacterController cc; Light flash;
-    Door front, near; Material wallMat, doorMat, woodMat, gold, floorMat;
+    Transform player, cam, granny, ghostBillboard, scareGhost; CharacterController cc; Light flash;
+    Door front, near; Material wallMat, wallPanelMat, doorMat, woodMat, gold, floorMat, bottleMat;
     Texture2D keyTexture, ghostTexture, floorTexture;
     AudioClip ambienceClip, childCryClip, ghostLaughClip, ghostScreamClip, dogHowlClip, thunderClip, keyClip, doorClip;
     AudioSource ambienceSource, musicSource;
     float soundT = 8f, proximitySoundT = 4f;
     float yaw, pitch, stamina = 1, chaseT, blackout, nextBlackout = 12, msgT, bob;
-    int keyCount, state; string msg = "";
+    int keyCount, state; float playerBlood = 100f, hitCooldown, scareT; bool firstScareShown; string msg = "";
     Vector2Int pN; bool hasN, hasW; Vector3 pW;
 
     Material Mat(Color c, bool emit = false)
@@ -115,11 +115,12 @@ public class HorrorGame : MonoBehaviour
     {
         if (clip != null) AudioSource.PlayClipAtPoint(clip, position, volume);
     }
-    void ShowDeathGhost()
+    void ShowScare(float duration)
     {
-        if (deathGhost != null || ghostTexture == null) return;
-        deathGhost = Billboard("Death Granny", new Vector3(0, .15f, 1.25f), new Vector3(1.55f, 3.1f, 1), ghostTexture, cam);
-        deathGhost.localRotation = Quaternion.Euler(0, 180, 0);
+        if (ghostTexture == null) return;
+        if (scareGhost != null) Destroy(scareGhost.gameObject);
+        scareGhost = Billboard("Granny Jumpscare", new Vector3(0, .15f, 1.25f), new Vector3(1.55f, 3.1f, 1), ghostTexture, cam);
+        scareGhost.localRotation = Quaternion.Euler(0, 180, 0); scareT = duration;
     }
     GameObject P(PrimitiveType t, Vector3 pos, Vector3 sc, Material m, Transform par = null, bool col = true)
     {
@@ -132,6 +133,38 @@ public class HorrorGame : MonoBehaviour
     {
         float t = .4f, w = Mathf.Abs(x2 - x1) + (x1 == x2 ? t : 0), d = Mathf.Abs(z2 - z1) + (z1 == z2 ? t : 0);
         P(PrimitiveType.Cube, new Vector3((x1 + x2) / 2, 1.5f, (z1 + z2) / 2), new Vector3(w, 3, d), wallMat);
+        if (z1 == z2)
+        {
+            P(PrimitiveType.Cube, new Vector3((x1 + x2) / 2, 1.5f, z1 + .215f), new Vector3(Mathf.Max(.5f, w - .22f), 2.58f, .035f), wallPanelMat, null, false);
+            P(PrimitiveType.Cube, new Vector3((x1 + x2) / 2, 1.5f, z1 - .215f), new Vector3(Mathf.Max(.5f, w - .22f), 2.58f, .035f), wallPanelMat, null, false);
+        }
+        else
+        {
+            P(PrimitiveType.Cube, new Vector3(x1 + .215f, 1.5f, (z1 + z2) / 2), new Vector3(.035f, 2.58f, Mathf.Max(.5f, d - .22f)), wallPanelMat, null, false);
+            P(PrimitiveType.Cube, new Vector3(x1 - .215f, 1.5f, (z1 + z2) / 2), new Vector3(.035f, 2.58f, Mathf.Max(.5f, d - .22f)), wallPanelMat, null, false);
+        }
+    }
+    void AddMissingText(Vector3 position, Vector3 normal)
+    {
+        var g = new GameObject("MISSING warning"); g.transform.position = position; g.transform.rotation = Quaternion.LookRotation(normal);
+        var text = g.AddComponent<TextMesh>(); text.text = "MISSING"; text.fontSize = 48; text.characterSize = .16f;
+        text.anchor = TextAnchor.MiddleCenter; text.alignment = TextAlignment.Center; text.color = new Color(.72f, .015f, .015f);
+        var renderer = g.GetComponent<MeshRenderer>(); renderer.material = Mat(new Color(.72f, .015f, .015f), true);
+    }
+    void AddRoomFurniture(Vector3 center)
+    {
+        Material furnitureMat = Mat(new Color(.25f, .12f, .055f)); Material chairMat = Mat(new Color(.16f, .075f, .035f));
+        P(PrimitiveType.Cube, center + new Vector3(0, 1.05f, 0), new Vector3(2.7f, .16f, 1.25f), furnitureMat);
+        for (int x = -1; x <= 1; x += 2) for (int z = -1; z <= 1; z += 2)
+            P(PrimitiveType.Cube, center + new Vector3(x * 1.05f, .52f, z * .42f), new Vector3(.12f, 1f, .12f), furnitureMat);
+        P(PrimitiveType.Cube, center + new Vector3(2.1f, 1.1f, .5f), new Vector3(.8f, 2.2f, .7f), furnitureMat);
+        P(PrimitiveType.Cube, center + new Vector3(-2.2f, .7f, .3f), new Vector3(1.05f, .12f, 1.05f), chairMat);
+        P(PrimitiveType.Cube, center + new Vector3(-2.65f, 1.35f, .3f), new Vector3(.12f, 1.3f, 1.05f), chairMat);
+        P(PrimitiveType.Cube, center + new Vector3(-2.65f, .7f, -.2f), new Vector3(.12f, 1.2f, .12f), chairMat);
+        P(PrimitiveType.Cube, center + new Vector3(-1.75f, .7f, -.2f), new Vector3(.12f, 1.2f, .12f), chairMat);
+        var bottle = P(PrimitiveType.Cylinder, center + new Vector3(.55f, 1.38f, 0), new Vector3(.16f, .28f, .16f), bottleMat, null, false);
+        P(PrimitiveType.Cylinder, center + new Vector3(.55f, 1.7f, 0), new Vector3(.19f, .05f, .19f), bottleMat, null, false);
+        furn.Add(new Vector2(center.x, center.z));
     }
     Door AddDoor(float hx, float hz, bool ax, bool locked = false)
     {
@@ -180,7 +213,9 @@ public class HorrorGame : MonoBehaviour
             var musicObject = new GameObject("Main Menu Theme"); musicSource = musicObject.AddComponent<AudioSource>();
             musicSource.clip = theme; musicSource.loop = true; musicSource.volume = .34f; musicSource.spatialBlend = 0f; musicSource.Play();
         }
-        wallMat = Mat(new Color(.36f, .29f, .23f)); doorMat = Mat(new Color(.29f, .17f, .09f)); woodMat = Mat(new Color(.17f, .1f, .06f)); gold = Mat(new Color(1f, .8f, .2f), true);
+        wallMat = Mat(new Color(.42f, .40f, .36f)); wallPanelMat = Mat(new Color(.72f, .70f, .64f));
+        doorMat = Mat(new Color(.29f, .17f, .09f)); woodMat = Mat(new Color(.17f, .1f, .06f)); gold = Mat(new Color(1f, .8f, .2f), true);
+        bottleMat = Mat(new Color(.32f, .72f, .82f));
         floorMat = ImageMat(floorTexture, false); floorMat.mainTextureScale = new Vector2(8, 8);
 
         // floor, ceiling, ground, gable roof
@@ -201,6 +236,9 @@ public class HorrorGame : MonoBehaviour
                 Wall(a, c, a + 3.75f, c); Wall(a + 6.25f, c, a + 10, c); Wall(c, a, c, a + 3.75f); Wall(c, a + 6.25f, c, a + 10);
                 AddDoor(a + 3.75f, c, true); AddDoor(c, a + 3.75f, false);
             }
+        AddMissingText(new Vector3(5, 1.65f, 9.77f), Vector3.forward);
+        AddMissingText(new Vector3(24.8f, 1.65f, 15f), Vector3.left);
+        AddMissingText(new Vector3(15f, 1.65f, 20.23f), Vector3.back);
 
         // furniture + lamps (one per room)
         Color[] lc = { new Color(1, .33f, .13f), new Color(1, .67f, .33f), new Color(.4f, 1, .53f), new Color(1, .13f, .2f) };
@@ -209,6 +247,7 @@ public class HorrorGame : MonoBehaviour
             {
                 float fx = i * 10 + 1.8f + ((i + j) % 2) * 5, fz = j * 10 + 1.8f;
                 P(PrimitiveType.Cube, new Vector3(fx + .9f, .5f, fz + .9f), new Vector3(1.8f, 1, 1.8f), woodMat); furn.Add(new Vector2(fx + .9f, fz + .9f));
+                AddRoomFurniture(new Vector3(i * 10 + 5, 0, j * 10 + 5));
                 var lg = new GameObject("Lamp"); lg.transform.position = new Vector3(i * 10 + 5, 2.6f, j * 10 + 5);
                 var L = lg.AddComponent<Light>(); L.type = LightType.Point; L.range = 13; L.intensity = 1.2f; L.color = lc[(i * 3 + j) % 4];
                 lamps.Add(L); lampK.Add(0);
@@ -313,7 +352,12 @@ public class HorrorGame : MonoBehaviour
     void Update()
     {
         if (state != 0) { if (Input.GetKeyDown(KeyCode.R)) { Time.timeScale = 1; SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex); } return; }
-        float dt = Time.deltaTime; msgT -= dt;
+        float dt = Time.deltaTime; msgT -= dt; hitCooldown -= dt;
+        if (scareGhost != null && scareT > 0f)
+        {
+            scareT -= dt;
+            if (scareT <= 0f) { Destroy(scareGhost.gameObject); scareGhost = null; }
+        }
 
         // player
         yaw += Input.GetAxis("Mouse X") * 2f; pitch = Mathf.Clamp(pitch - Input.GetAxis("Mouse Y") * 2f, -80, 80);
@@ -335,6 +379,7 @@ public class HorrorGame : MonoBehaviour
             {
                 Destroy(k.gameObject); keys.RemoveAt(i); keyCount++;
                 PlayScare(keyClip, pp, .55f);
+                if (keyCount == 1 && !firstScareShown) { firstScareShown = true; ShowScare(2.2f); Say("Something is watching you...", 3f); }
                 if (keyCount >= 10) { front.locked = false; Open(front, true); Say("The front door is unlocked! RUN!", 5); }
                 else Say("Key found: " + keyCount + "/10", 2.5f);
             }
@@ -378,7 +423,13 @@ public class HorrorGame : MonoBehaviour
             float spd = chase ? 2.6f + keyCount * .19f : 1.5f;
             granny.position += v / dd * Mathf.Min(dd, spd * dt); granny.rotation = Quaternion.LookRotation(v / dd);
         }
-        if (d < 1.1f && chase) { ShowDeathGhost(); PlayScare(ghostScreamClip, pp, .9f); state = 1; Time.timeScale = 0; Cursor.lockState = CursorLockMode.None; return; }
+        if (d < 1.1f && chase && hitCooldown <= 0f)
+        {
+            playerBlood = Mathf.Max(0f, playerBlood - 10f); hitCooldown = 1.5f; ShowScare(1.3f); PlayScare(ghostScreamClip, pp, .9f);
+            if (playerBlood <= 0f) { state = 1; Time.timeScale = 0; Cursor.lockState = CursorLockMode.None; return; }
+            Say("Granny hit you! Blood: " + Mathf.CeilToInt(playerBlood) + "/100", 2f); chaseT = 0f;
+            Vector3 retreat = gp - pp; retreat.y = 0; if (retreat.sqrMagnitude > .01f) granny.position += retreat.normalized * 2.5f;
+        }
         if (pp.z > 31 && keyCount >= 10) { state = 2; Cursor.lockState = CursorLockMode.None; return; }
 
         // scary lights
@@ -399,6 +450,7 @@ public class HorrorGame : MonoBehaviour
         var c = new GUIStyle(l) { alignment = TextAnchor.MiddleCenter };
         GUI.Label(new Rect(15, 10, 500, 30), "Keys: " + keyCount + "/10", l);
         GUI.Label(new Rect(15, 40, 500, 30), "Stamina: " + new string('|', Mathf.RoundToInt(stamina * 20)), l);
+        GUI.Label(new Rect(15, 70, 500, 30), "Blood: " + Mathf.CeilToInt(playerBlood) + "/100", l);
         if (near != null && state == 0) GUI.Label(new Rect(0, Screen.height * .65f, Screen.width, 40), "[E] " + (near.open ? "Close" : "Open") + " door", c);
         if (msgT > 0) GUI.Label(new Rect(0, Screen.height * .8f, Screen.width, 40), msg, c);
         if (state != 0)
