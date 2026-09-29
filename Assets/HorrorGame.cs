@@ -11,8 +11,9 @@ public class HorrorGame : MonoBehaviour
     readonly List<Light> lamps = new List<Light>();
     readonly List<float> lampK = new List<float>();
     readonly List<Vector2> furn = new List<Vector2>();
-    Transform player, cam, granny; CharacterController cc; Light flash;
-    Door front, near; Material wallMat, doorMat, woodMat, gold;
+    Transform player, cam, granny, ghostBillboard; CharacterController cc; Light flash;
+    Door front, near; Material wallMat, doorMat, woodMat, gold, floorMat;
+    Texture2D keyTexture, ghostTexture, floorTexture;
     float yaw, pitch, stamina = 1, chaseT, blackout, nextBlackout = 12, msgT, bob;
     int keyCount, state; string msg = "";
     Vector2Int pN; bool hasN, hasW; Vector3 pW;
@@ -22,6 +23,19 @@ public class HorrorGame : MonoBehaviour
         var m = new Material(Shader.Find("Standard")); m.color = c;
         if (emit) { m.EnableKeyword("_EMISSION"); m.SetColor("_EmissionColor", c * 2f); }
         return m;
+    }
+    Material ImageMat(Texture2D texture, bool transparent)
+    {
+        Shader shader = Shader.Find(transparent ? "Unlit/Transparent" : "Unlit/Texture");
+        var m = new Material(shader); m.mainTexture = texture; m.color = Color.white;
+        return m;
+    }
+    Transform Billboard(string name, Vector3 pos, Vector3 scale, Texture2D texture, Transform parent)
+    {
+        var g = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        g.name = name; g.transform.SetParent(parent); g.transform.localPosition = pos; g.transform.localScale = scale;
+        Destroy(g.GetComponent<Collider>()); g.GetComponent<Renderer>().material = ImageMat(texture, true);
+        return g.transform;
     }
     GameObject P(PrimitiveType t, Vector3 pos, Vector3 sc, Material m, Transform par = null, bool col = true)
     {
@@ -50,10 +64,12 @@ public class HorrorGame : MonoBehaviour
         foreach (var l in FindObjectsOfType<Light>()) if (l.type == LightType.Directional) l.enabled = false;
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat; RenderSettings.ambientLight = new Color(.07f, .07f, .09f);
         RenderSettings.fog = true; RenderSettings.fogMode = FogMode.Exponential; RenderSettings.fogDensity = .08f; RenderSettings.fogColor = Color.black;
+        keyTexture = Resources.Load<Texture2D>("GoldenKey"); ghostTexture = Resources.Load<Texture2D>("GhostWoman"); floorTexture = Resources.Load<Texture2D>("WoodFloor");
         wallMat = Mat(new Color(.36f, .29f, .23f)); doorMat = Mat(new Color(.29f, .17f, .09f)); woodMat = Mat(new Color(.17f, .1f, .06f)); gold = Mat(new Color(1f, .8f, .2f), true);
+        floorMat = ImageMat(floorTexture, false); floorMat.mainTextureScale = new Vector2(8, 8);
 
         // floor, ceiling, ground, gable roof
-        P(PrimitiveType.Cube, new Vector3(15, -.1f, 15), new Vector3(30, .2f, 30), Mat(new Color(.16f, .12f, .09f)));
+        P(PrimitiveType.Cube, new Vector3(15, -.1f, 15), new Vector3(30, .2f, 30), floorMat);
         P(PrimitiveType.Cube, new Vector3(15, 3.1f, 15), new Vector3(30, .2f, 30), Mat(new Color(.1f, .08f, .07f)));
         P(PrimitiveType.Cube, new Vector3(15, -.2f, 15), new Vector3(300, .2f, 300), Mat(new Color(.04f, .07f, .04f)));
         var rm = Mat(new Color(.16f, .08f, .06f));
@@ -91,7 +107,7 @@ public class HorrorGame : MonoBehaviour
             var r = rooms[n % 8]; Vector2 p;
             do { p = new Vector2(r.x * 10 + 5 + Random.Range(-3.5f, 3.5f), r.y * 10 + 5 + Random.Range(-3.5f, 3.5f)); }
             while (furn.Exists(f => Vector2.Distance(f, p) < 2f));
-            keys.Add(P(PrimitiveType.Sphere, new Vector3(p.x, 1f, p.y), Vector3.one * .3f, gold, null, false).transform);
+            keys.Add(Billboard("Golden Key", new Vector3(p.x, 1.05f, p.y), Vector3.one * 1.15f, keyTexture, null));
         }
 
         // player
@@ -116,6 +132,7 @@ public class HorrorGame : MonoBehaviour
         P(PrimitiveType.Cube, new Vector3(.3f, 1.15f, .4f), new Vector3(.09f, .09f, .8f), Mat(new Color(.79f, .76f, .7f)), granny, false);
         var gl = new GameObject("GrannyGlow"); gl.transform.SetParent(granny, false); gl.transform.localPosition = new Vector3(0, 1.3f, 0);
         var gL = gl.AddComponent<Light>(); gL.color = Color.red; gL.range = 7; gL.intensity = 1f;
+        ghostBillboard = Billboard("Ghost Woman", new Vector3(0, 1.5f, .05f), new Vector3(1.9f, 2.7f, 1), ghostTexture, granny);
         granny.position = new Vector3(5, 0, 25);
         Say("Find 10 keys. Stay quiet. She is listening...", 4);
     }
@@ -177,7 +194,7 @@ public class HorrorGame : MonoBehaviour
         // keys
         for (int i = keys.Count - 1; i >= 0; i--)
         {
-            var k = keys[i]; k.Rotate(0, 120 * dt, 0);
+            var k = keys[i]; k.LookAt(cam); k.Rotate(0, 0, 180); k.Rotate(0, 0, 45 * dt);
             if (Vector3.Distance(k.position, pp + Vector3.up) < 1.3f)
             {
                 Destroy(k.gameObject); keys.RemoveAt(i); keyCount++;
@@ -203,6 +220,7 @@ public class HorrorGame : MonoBehaviour
         float d = Dist(gp, pp); var g = Cell(gp); var p = Cell(pp);
         if (g == p || d < 5 || (sp && d < 12)) chaseT = 4; chaseT -= dt; bool chase = chaseT > 0;
         Vector3 v = Target(chase) - gp; v.y = 0; float dd = v.magnitude; bool blocked = false;
+        if (ghostBillboard != null) ghostBillboard.LookAt(cam);
         foreach (var D in doors)
             if (!D.open && !D.locked && Dist(D.c, gp) < 1.5f) { blocked = true; D.w += dt; if (D.w > (chase ? .6f : 1.2f)) Open(D, true); }
         if (!blocked && dd > .01f)
