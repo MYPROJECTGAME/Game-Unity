@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using System.Collections.Generic;
-using System;
 
 // Attach to ONE empty GameObject and press Play. The whole game builds itself.
 public class HorrorGame : MonoBehaviour
@@ -41,7 +40,7 @@ public class HorrorGame : MonoBehaviour
         Destroy(g.GetComponent<Collider>()); g.GetComponent<Renderer>().material = ImageMat(texture, true);
         return g.transform;
     }
-    AudioClip MakeClip(string name, float seconds, Func<float, float> generator)
+    AudioClip MakeClip(string name, float seconds, System.Func<float, float> generator)
     {
         const int rate = 22050;
         int length = Mathf.CeilToInt(seconds * rate);
