@@ -31,6 +31,7 @@ public class HorrorGame : MonoBehaviour
     {
         Shader shader = Shader.Find(transparent ? "Unlit/Transparent" : "Unlit/Texture");
         var m = new Material(shader); m.mainTexture = texture; m.color = Color.white;
+        if (transparent && m.HasProperty("_Cull")) m.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
         return m;
     }
     Transform Billboard(string name, Vector3 pos, Vector3 scale, Texture2D texture, Transform parent)
@@ -194,7 +195,15 @@ public class HorrorGame : MonoBehaviour
         }
         var gl = new GameObject("GrannyGlow"); gl.transform.SetParent(granny, false); gl.transform.localPosition = new Vector3(0, 1.3f, 0);
         var gL = gl.AddComponent<Light>(); gL.color = Color.red; gL.range = 7; gL.intensity = 1f;
-        ghostBillboard = Billboard("Ghost Woman", new Vector3(0, 1.5f, .05f), new Vector3(1.9f, 2.7f, 1), ghostTexture, granny);
+        if (ghostTexture != null)
+        {
+            ghostBillboard = Billboard("Ghost Woman", new Vector3(0, 1.5f, .05f), new Vector3(1.9f, 2.7f, 1), ghostTexture, granny);
+        }
+        else
+        {
+            ghostBillboard = null;
+            Say("Ghost image missing: using 3D fallback.", 4);
+        }
         granny.position = new Vector3(5, 0, 25);
         Say("Find 10 keys. Stay quiet. She is listening...", 4);
     }
