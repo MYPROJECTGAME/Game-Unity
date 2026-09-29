@@ -123,7 +123,10 @@ public class HorrorGame : MonoBehaviour
         foreach (var l in FindObjectsOfType<Light>()) if (l.type == LightType.Directional) l.enabled = false;
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat; RenderSettings.ambientLight = new Color(.07f, .07f, .09f);
         RenderSettings.fog = true; RenderSettings.fogMode = FogMode.Exponential; RenderSettings.fogDensity = .08f; RenderSettings.fogColor = Color.black;
-        keyTexture = Resources.Load<Texture2D>("GoldenKey"); ghostTexture = Resources.Load<Texture2D>("GhostWoman"); floorTexture = Resources.Load<Texture2D>("WoodFloor");
+        keyTexture = Resources.Load<Texture2D>("GoldenKey");
+        ghostTexture = Resources.Load<Texture2D>("Granny");
+        if (ghostTexture == null) ghostTexture = Resources.Load<Texture2D>("GhostWoman");
+        floorTexture = Resources.Load<Texture2D>("WoodFloor");
         BuildScaryAudio();
         wallMat = Mat(new Color(.36f, .29f, .23f)); doorMat = Mat(new Color(.29f, .17f, .09f)); woodMat = Mat(new Color(.17f, .1f, .06f)); gold = Mat(new Color(1f, .8f, .2f), true);
         floorMat = ImageMat(floorTexture, false); floorMat.mainTextureScale = new Vector2(8, 8);
@@ -197,7 +200,7 @@ public class HorrorGame : MonoBehaviour
         var gL = gl.AddComponent<Light>(); gL.color = Color.red; gL.range = 7; gL.intensity = 1f;
         if (ghostTexture != null)
         {
-            ghostBillboard = Billboard("Ghost Woman", new Vector3(0, 1.5f, .05f), new Vector3(1.9f, 2.7f, 1), ghostTexture, granny);
+            ghostBillboard = Billboard("Granny Image", new Vector3(0, 1.5f, .05f), new Vector3(1.5f, 3f, 1), ghostTexture, granny);
         }
         else
         {
@@ -237,6 +240,16 @@ public class HorrorGame : MonoBehaviour
         if (!hasW) { pW = new Vector3(g.x * 10 + 5 + Random.Range(-2.5f, 2.5f), 0, g.y * 10 + 5 + Random.Range(-2.5f, 2.5f)); hasW = true; }
         if (Dist(granny.position, pW) < .7f) { hasW = false; pN = Nb(g); hasN = true; return DoorPt(g, Step(g, pN)); }
         return pW;
+    }
+    bool GrannyCanDetect(Vector3 grannyPosition, Vector3 playerPosition, bool sprinting, Vector2Int grannyCell, Vector2Int playerCell)
+    {
+        Vector3 toPlayer = playerPosition - grannyPosition; toPlayer.y = 0;
+        float distance = toPlayer.magnitude;
+        if (distance < .01f) return true;
+        float facing = Vector3.Dot(granny.forward, toPlayer / distance);
+        bool insideVisionCone = facing > -.15f && (grannyCell == playerCell || distance < 5f);
+        bool makingNoise = sprinting && distance < 12f;
+        return insideVisionCone || makingNoise;
     }
     bool Open(Door D, bool o)
     {
@@ -291,7 +304,7 @@ public class HorrorGame : MonoBehaviour
 
         // granny
         float d = Dist(gp, pp); var g = Cell(gp); var p = Cell(pp);
-        if (g == p || d < 5 || (sp && d < 12)) chaseT = 4; chaseT -= dt; bool chase = chaseT > 0;
+        if (GrannyCanDetect(gp, pp, sp, g, p)) chaseT = 4; chaseT -= dt; bool chase = chaseT > 0;
         soundT -= dt; proximitySoundT -= dt;
         if (d < 9f && proximitySoundT <= 0f)
         {
@@ -313,7 +326,7 @@ public class HorrorGame : MonoBehaviour
             float spd = chase ? 2.6f + keyCount * .19f : 1.5f;
             granny.position += v / dd * Mathf.Min(dd, spd * dt); granny.rotation = Quaternion.LookRotation(v / dd);
         }
-        if (d < 1.1f) { PlayScare(ghostScreamClip, pp, .9f); state = 1; Time.timeScale = 0; Cursor.lockState = CursorLockMode.None; return; }
+        if (d < 1.1f && chase) { PlayScare(ghostScreamClip, pp, .9f); state = 1; Time.timeScale = 0; Cursor.lockState = CursorLockMode.None; return; }
         if (pp.z > 31 && keyCount >= 10) { state = 2; Cursor.lockState = CursorLockMode.None; return; }
 
         // scary lights
