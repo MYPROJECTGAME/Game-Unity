@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using System.Collections.Generic;
+using System;
 
 // Attach to ONE empty GameObject and press Play. The whole game builds itself.
 public class HorrorGame : MonoBehaviour
@@ -14,6 +15,9 @@ public class HorrorGame : MonoBehaviour
     Transform player, cam, granny, ghostBillboard; CharacterController cc; Light flash;
     Door front, near; Material wallMat, doorMat, woodMat, gold, floorMat;
     Texture2D keyTexture, ghostTexture, floorTexture;
+    AudioClip ambienceClip, childCryClip, ghostLaughClip, ghostScreamClip, dogHowlClip, thunderClip, keyClip, doorClip;
+    AudioSource ambienceSource;
+    float soundT = 8f, proximitySoundT = 4f;
     float yaw, pitch, stamina = 1, chaseT, blackout, nextBlackout = 12, msgT, bob;
     int keyCount, state; string msg = "";
     Vector2Int pN; bool hasN, hasW; Vector3 pW;
@@ -36,6 +40,61 @@ public class HorrorGame : MonoBehaviour
         g.name = name; g.transform.SetParent(parent); g.transform.localPosition = pos; g.transform.localScale = scale;
         Destroy(g.GetComponent<Collider>()); g.GetComponent<Renderer>().material = ImageMat(texture, true);
         return g.transform;
+    }
+    AudioClip MakeClip(string name, float seconds, Func<float, float> generator)
+    {
+        const int rate = 22050;
+        int length = Mathf.CeilToInt(seconds * rate);
+        var clip = AudioClip.Create(name, length, 1, rate, false);
+        var samples = new float[length];
+        for (int i = 0; i < length; i++)
+        {
+            float t = i / (float)rate;
+            float edge = Mathf.Min(1f, t * 12f) * Mathf.Min(1f, (seconds - t) * 8f);
+            samples[i] = Mathf.Clamp(generator(t) * edge, -1f, 1f);
+        }
+        clip.SetData(samples, 0);
+        return clip;
+    }
+    void BuildScaryAudio()
+    {
+        ambienceClip = MakeClip("House Drone", 6f, t => Mathf.Sin(t * 2.1f) * .08f + Mathf.Sin(t * 7.7f) * .025f);
+        childCryClip = MakeClip("Distant Child Cry", 4.4f, t =>
+        {
+            float sob = .35f + Mathf.Abs(Mathf.Sin(t * 2.2f)) * .65f;
+            float pitch = 510f + Mathf.Sin(t * 3.7f) * 120f;
+            return (Mathf.Sin(t * pitch) + Mathf.Sin(t * pitch * 2.01f) * .25f) * sob * .34f;
+        });
+        ghostLaughClip = MakeClip("Ghost Laugh", 2.8f, t =>
+        {
+            float pulse = Mathf.Abs(Mathf.Sin(t * 4.2f));
+            float pitch = 180f + Mathf.Sin(t * 5f) * 55f;
+            return (Mathf.Sin(t * pitch) + Mathf.Sin(t * pitch * 1.9f) * .35f) * pulse * .42f;
+        });
+        ghostScreamClip = MakeClip("Ghost Scream", 3.1f, t =>
+        {
+            float pitch = 230f + t * 310f + Mathf.Sin(t * 18f) * 50f;
+            return (Mathf.Sin(t * pitch) + Mathf.Sin(t * pitch * 2.03f) * .2f) * .38f;
+        });
+        dogHowlClip = MakeClip("Distant Dog Howl", 3.8f, t =>
+        {
+            float pitch = 260f + Mathf.Sin(t * 1.6f) * 95f;
+            return (Mathf.Sin(t * pitch) + Mathf.Sin(t * pitch * 2f) * .3f) * .3f;
+        });
+        thunderClip = MakeClip("House Thunder", 2.6f, t =>
+        {
+            float crack = Mathf.PerlinNoise(t * 90f, .4f) * 2f - 1f;
+            return crack * Mathf.Exp(-t * 2.6f) * .55f + Mathf.Sin(t * 34f) * .12f;
+        });
+        keyClip = MakeClip("Key Chime", 1.2f, t => Mathf.Sin(t * 1100f) * .24f + Mathf.Sin(t * 1650f) * .12f);
+        doorClip = MakeClip("Door Creak", 1.5f, t => Mathf.Sin(t * (130f + t * 280f)) * .18f + Mathf.Sin(t * 41f) * .12f);
+        var go = new GameObject("House Ambience");
+        ambienceSource = go.AddComponent<AudioSource>(); ambienceSource.clip = ambienceClip; ambienceSource.loop = true;
+        ambienceSource.volume = .22f; ambienceSource.spatialBlend = 0f; ambienceSource.Play();
+    }
+    void PlayScare(AudioClip clip, Vector3 position, float volume)
+    {
+        if (clip != null) AudioSource.PlayClipAtPoint(clip, position, volume);
     }
     GameObject P(PrimitiveType t, Vector3 pos, Vector3 sc, Material m, Transform par = null, bool col = true)
     {
@@ -65,6 +124,7 @@ public class HorrorGame : MonoBehaviour
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat; RenderSettings.ambientLight = new Color(.07f, .07f, .09f);
         RenderSettings.fog = true; RenderSettings.fogMode = FogMode.Exponential; RenderSettings.fogDensity = .08f; RenderSettings.fogColor = Color.black;
         keyTexture = Resources.Load<Texture2D>("GoldenKey"); ghostTexture = Resources.Load<Texture2D>("GhostWoman"); floorTexture = Resources.Load<Texture2D>("WoodFloor");
+        BuildScaryAudio();
         wallMat = Mat(new Color(.36f, .29f, .23f)); doorMat = Mat(new Color(.29f, .17f, .09f)); woodMat = Mat(new Color(.17f, .1f, .06f)); gold = Mat(new Color(1f, .8f, .2f), true);
         floorMat = ImageMat(floorTexture, false); floorMat.mainTextureScale = new Vector2(8, 8);
 
@@ -198,6 +258,7 @@ public class HorrorGame : MonoBehaviour
             if (Vector3.Distance(k.position, pp + Vector3.up) < 1.3f)
             {
                 Destroy(k.gameObject); keys.RemoveAt(i); keyCount++;
+                PlayScare(keyClip, pp, .55f);
                 if (keyCount >= 10) { front.locked = false; Open(front, true); Say("The front door is unlocked! RUN!", 5); }
                 else Say("Key found: " + keyCount + "/10", 2.5f);
             }
@@ -214,11 +275,24 @@ public class HorrorGame : MonoBehaviour
         {
             if (near.locked) Say("Locked. You need all 10 keys (" + keyCount + "/10)", 2);
             else if (!Open(near, !near.open)) Say("Something is in the way!", 1);
+            else PlayScare(doorClip, near.c, .35f);
         }
 
         // granny
         float d = Dist(gp, pp); var g = Cell(gp); var p = Cell(pp);
         if (g == p || d < 5 || (sp && d < 12)) chaseT = 4; chaseT -= dt; bool chase = chaseT > 0;
+        soundT -= dt; proximitySoundT -= dt;
+        if (d < 9f && proximitySoundT <= 0f)
+        {
+            proximitySoundT = Random.Range(7f, 13f); PlayScare(d < 4f ? ghostLaughClip : childCryClip, gp, d < 4f ? .75f : .38f);
+        }
+        if (soundT <= 0f)
+        {
+            soundT = Random.Range(12f, 24f);
+            int choice = Random.Range(0, 3);
+            PlayScare(choice == 0 ? dogHowlClip : choice == 1 ? childCryClip : thunderClip,
+                new Vector3(Random.Range(2f, 28f), 1f, Random.Range(2f, 28f)), .3f);
+        }
         Vector3 v = Target(chase) - gp; v.y = 0; float dd = v.magnitude; bool blocked = false;
         if (ghostBillboard != null) ghostBillboard.LookAt(cam);
         foreach (var D in doors)
@@ -228,12 +302,12 @@ public class HorrorGame : MonoBehaviour
             float spd = chase ? 2.6f + keyCount * .19f : 1.5f;
             granny.position += v / dd * Mathf.Min(dd, spd * dt); granny.rotation = Quaternion.LookRotation(v / dd);
         }
-        if (d < 1.1f) { state = 1; Time.timeScale = 0; Cursor.lockState = CursorLockMode.None; return; }
+        if (d < 1.1f) { PlayScare(ghostScreamClip, pp, .9f); state = 1; Time.timeScale = 0; Cursor.lockState = CursorLockMode.None; return; }
         if (pp.z > 31 && keyCount >= 10) { state = 2; Cursor.lockState = CursorLockMode.None; return; }
 
         // scary lights
         blackout -= dt; nextBlackout -= dt;
-        if (nextBlackout <= 0) { nextBlackout = 22 + Random.Range(0, 20f); blackout = 1.8f; Say("The lights died...", 1.6f); }
+        if (nextBlackout <= 0) { nextBlackout = 22 + Random.Range(0, 20f); blackout = 1.8f; PlayScare(thunderClip, pp, .65f); Say("The lights died...", 1.6f); }
         for (int i = 0; i < lamps.Count; i++)
         {
             if (Random.value < .008f + (d < 10 ? .05f : 0f)) lampK[i] = .15f + Random.value * .3f;
